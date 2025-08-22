@@ -5,9 +5,10 @@ import { ApiResponse } from "../../utils/ApiResponse.js";
 import { uploadCloudinary } from "../../utils/cloudinary.js";
 
 const createMenuItem = asyncHandler(async (req, res) => {
-  const { name, price, description, categoryId } = req.body;
+  const { name, description, categoryId, sizes, ingredients, isAvailable } =
+    req.body;
 
-  if (!name || !price || !description || !categoryId) {
+  if (!name || !description || !categoryId) {
     throw new ApiError(404, "All feild are required.");
   }
 
@@ -22,13 +23,25 @@ const createMenuItem = asyncHandler(async (req, res) => {
   if (!uploadImage) {
     throw new ApiError(404, "upload image not found");
   }
+  // ✅ Safely parse JSON fields
+  let parsedSizes = [];
+  let parsedIngredients = [];
+
+  try {
+    if (sizes) parsedSizes = JSON.parse(sizes);
+    if (ingredients) parsedIngredients = JSON.parse(ingredients);
+  } catch (err) {
+    throw new ApiError(400, "Invalid JSON format in sizes/ingredients.");
+  }
 
   const menuItem = await MenuItem.create({
     image: uploadImage?.url,
     name,
-    price,
     description,
     category: categoryId || null,
+    sizes: parsedSizes,
+    ingredients: parsedIngredients,
+    isAvailable: isAvailable ?? true,
   });
 
   if (!menuItem) {
@@ -43,20 +56,46 @@ const createMenuItem = asyncHandler(async (req, res) => {
 const getMenuItem = asyncHandler(async (req, res) => {
   const { categoryId } = req.params;
 
-  if (!categoryId) {
-    throw new ApiError(404, "Categoryid is required.");
+  let catagoryWiseMenu;
+  if (categoryId) {
+    catagoryWiseMenu = await MenuItem.find({
+      category: categoryId,
+    }).populate("category", "name");
+  } else {
+    catagoryWiseMenu = await MenuItem.find().populate("category", "name");
   }
 
-  const catagoryWiseMenu = await MenuItem.find({
-    category: categoryId,
-  }).populate("category", "name");
-
-  console.log("catagoryWiseMenu",catagoryWiseMenu)
-  if(!catagoryWiseMenu){
-    throw new ApiError(404,"menuItem not found.")
+  if (!catagoryWiseMenu) {
+    throw new ApiError(404, "menuItem not found.");
   }
 
-  return res.status(200).json(new ApiResponse(200,catagoryWiseMenu,"Menus fetched successfuly."))
+  return res
+    .status(200)
+    .json(new ApiResponse(200, catagoryWiseMenu, "Menus fetched successfuly."));
 });
 
-export { createMenuItem,getMenuItem };
+const getMenuDetailsById = asyncHandler(async (req, res) => {
+  const { menuId } = req.params;
+
+  if (!menuId) {
+    throw new ApiError(404, "Id is Required.");
+  }
+
+  const menuDetails = await MenuItem.findById(menuId).populate(
+    "category",
+    "name"
+  );
+
+  if (!menuDetails) {
+    throw new ApiError(404, "Menu Details not found.");
+  }
+
+  return res
+    .status(200)
+    .json(
+      new ApiResponse(200, menuDetails, "Menu details fetch successfully.")
+    );
+});
+
+
+export { createMenuItem, getMenuItem, getMenuDetailsById };
